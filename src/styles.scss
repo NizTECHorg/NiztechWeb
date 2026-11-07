@@ -588,3 +588,27 @@ body {
   display: none !important;
 }
 
+
+/* === FRAMER BREAKPOINT VARIANTS ===
+   The Framer SSR HTML ships every breakpoint variant (desktop / tablet / phone)
+   of each section and navbar at once, tagged with `hidden-<hash>`. Framer's
+   original page head hides the non-matching ones via these media queries;
+   without them all variants render stacked on reload until hydration. */
+@media (min-width: 1200px) {
+  .hidden-72rtr7, .hidden-c5oytb, .hidden-12egtth, .hidden-1fhoekw,
+  .hidden-1rjxzvi, .hidden-1vv6w53, .hidden-sv146i {
+    display: none !important;
+  }
+}
+@media (min-width: 810px) and (max-width: 1199.98px) {
+  .hidden-13wce1h, .hidden-6p5vj0, .hidden-7unodc, .hidden-1qsc2eh,
+  .hidden-zrb4yf, .hidden-11jvxkx, .hidden-obe3zo {
+    display: none !important;
+  }
+}
+@media (max-width: 809.98px) {
+  .hidden-8oklgw, .hidden-t6t2cx, .hidden-fn1ib6, .hidden-vwy16f,
+  .hidden-1xllcd9, .hidden-19ww6rg, .hidden-1asvlu1 {
+    display: none !important;
+  }
+}
