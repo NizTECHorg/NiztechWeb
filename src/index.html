@@ -13,8 +13,50 @@
   <meta property="og:description" content="NIZ TECH cria automações inteligentes que otimizam processos, reduzem custos e aumentam a eficiência operacional. Soluções sob medida com foco em integração, escala e resultados reais.">
   <meta property="og:image" content="/assets/meta/meta-581bf9cb.png">
   <script src="/assets/animate/animator-init.js"></script>
+  <link rel="preload" as="image" href="/assets/images/image-ff40693f.png">
+  <style>
+    html.niz-loading, html.niz-loading body { overflow: hidden; }
+    #niz-loader {
+      position: fixed; inset: 0; z-index: 2147483647;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px;
+      background: #000;
+      opacity: 1; visibility: visible;
+      transition: opacity 550ms cubic-bezier(.4, 0, .2, 1), visibility 0s linear 0s;
+    }
+    #niz-loader.niz-loader--hidden {
+      opacity: 0; visibility: hidden; pointer-events: none;
+      transition: opacity 550ms cubic-bezier(.4, 0, .2, 1), visibility 0s linear 550ms;
+    }
+    #niz-loader .niz-loader__logo {
+      width: 64px; height: auto; display: block;
+      animation: niz-loader-pulse 1.8s ease-in-out infinite;
+    }
+    #niz-loader .niz-loader__track {
+      position: relative; width: 180px; height: 2px; overflow: hidden;
+      border-radius: 2px; background: rgba(255, 255, 255, .1);
+    }
+    #niz-loader .niz-loader__bar {
+      position: absolute; inset: 0; transform-origin: left center; transform: scaleX(0);
+      border-radius: inherit;
+      background: linear-gradient(90deg, rgb(40, 30, 255), rgb(118, 108, 255));
+      box-shadow: 0 0 12px rgba(76, 64, 255, .8);
+      transition: transform 400ms cubic-bezier(.4, 0, .2, 1);
+    }
+    @keyframes niz-loader-pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: .65; transform: scale(.96); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #niz-loader .niz-loader__logo { animation: none; }
+    }
+  </style>
 </head>
 <body>
+  <div id="niz-loader" role="progressbar" aria-label="Carregando NIZ TECH">
+    <img class="niz-loader__logo" src="/assets/images/image-ff40693f.png" alt="NIZ TECH" width="637" height="555">
+    <div class="niz-loader__track"><div class="niz-loader__bar" id="niz-loader-bar"></div></div>
+  </div>
+  <script>document.documentElement.classList.add('niz-loading');document.getElementById('niz-loader-bar').style.transform='scaleX(.08)';</script>
   <app-root></app-root>
 </body>
 </html>

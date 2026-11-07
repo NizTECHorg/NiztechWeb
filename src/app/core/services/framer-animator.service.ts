@@ -1,5 +1,6 @@
 import { Injectable, NgZone, inject } from '@angular/core';
 import { Router } from '@angular/router';
+import { LoaderSession, PageLoaderService } from './page-loader.service';
 
 export type FramerPageKey =
   | 'home'
@@ -51,6 +52,24 @@ interface FramerGlobalAnimator {
   ) => string | undefined;
 }
 
+/** Framer page chunks (lazy-imported by script_main on hydrate) — warmed while the loader is up. */
+const PAGE_CHUNKS: Record<FramerPageKey, string> = {
+  home: '/assets/animate/W8J_EbCVf1Hs7Knuw21lhxZ1zuFnJ1OLVRAoCrlnNC4.C9-cOVbG.mjs',
+  sobre: '/assets/animate/oJRcVeiGwMxDxQmYTzUrEmMnMiG6oD4MdthAnHA9MxM.BPiHxZXC.mjs',
+  projects: '/assets/animate/NRVyBFn2thYt7wChe03Tski5JPw9j0NHpKqJsDkNV3k.vQFGTKoW.mjs',
+  fluxo: '/assets/animate/N0ycXPFvwpLxsgnsPo8Bi6jfot5Ya0tq4WdnHlJ1VoU.End6lFRX.mjs',
+  nokta: '/assets/animate/N0ycXPFvwpLxsgnsPo8Bi6jfot5Ya0tq4WdnHlJ1VoU.End6lFRX.mjs',
+  contact: '/assets/animate/XOVRzqjCBFmmUsBwcvSFbPCX-QnJkLav2w2R40qyeXY.Kj5gOXFG.mjs',
+  'not-found': '/assets/animate/8vnYPyqsZ_VbNJYRkf94b-ZLlTVsUfObNbFdKCvebZ8.CVZffaRo.mjs',
+};
+
+/** Safety net: never keep the loader up longer than this, even if an asset hangs. */
+const LOADER_MAX_WAIT_MS = 12000;
+
+const dynamicImport = new Function('u', 'return import(u)') as <T = unknown>(
+  url: string
+) => Promise<T>;
+
 declare global {
   interface Window {
     animator?: FramerGlobalAnimator;
@@ -63,6 +82,8 @@ declare global {
 export class FramerAnimatorService {
   private readonly router = inject(Router);
   private readonly ngZone = inject(NgZone);
+  private readonly loader = inject(PageLoaderService);
+  private loaderSession: LoaderSession | null = null;
   private readonly payloadCache = new Map<FramerPageKey, SsrPagePayload>();
   private framerModPromise: Promise<FramerMainModule> | null = null;
   private cleanupFns: Array<() => void> = [];
@@ -101,10 +122,9 @@ export class FramerAnimatorService {
 
   private loadFramerMainModule(): Promise<FramerMainModule> {
     if (!this.framerModPromise) {
-      const dynamicImport = new Function('u', 'return import(u)') as (
-        url: string
-      ) => Promise<FramerMainModule>;
-      this.framerModPromise = dynamicImport('/assets/animate/script_main.CkCRKjyS.mjs');
+      this.framerModPromise = dynamicImport<FramerMainModule>(
+        '/assets/animate/script_main.CkCRKjyS.mjs'
+      );
     }
     return this.framerModPromise;
   }
@@ -129,7 +149,15 @@ export class FramerAnimatorService {
     pageKey: FramerPageKey,
     version: number
   ): Promise<void> {
-    const payload = await this.loadPayload(pageKey);
+    // 0. Full-screen NIZ TECH loader: everything below is tracked by its progress bar.
+    const session = this.loader.begin();
+    this.loaderSession = session;
+
+    const modPromise = session.track(this.loadFramerMainModule());
+    const chunkPromise = session.track(
+      dynamicImport(PAGE_CHUNKS[pageKey]).catch(() => undefined)
+    );
+    const payload = await session.track(this.loadPayload(pageKey));
     if (version !== this.mountVersion) return;
 
     let mainEl = rootEl.querySelector<HTMLElement>('#main');
@@ -159,6 +187,24 @@ export class FramerAnimatorService {
     );
     this.upsertScriptTag('__framer__breakpoints', 'framer/appear', payload.breakpoints);
     this.upsertScriptTag('__framer__handoverData', 'framer/handover', payload.handoverData);
+
+    // 2b. Wait for every asset of the page (eager images, fonts, Framer runtime + page chunk)
+    //     while the loader covers the screen. Appear animations only start afterwards.
+    const assets: Promise<unknown>[] = [modPromise, chunkPromise];
+    mainEl.querySelectorAll<HTMLImageElement>('img').forEach((img) => {
+      if (img.loading === 'lazy') return;
+      assets.push(session.track(this.waitForImage(img)));
+    });
+    if (document.fonts?.ready) {
+      assets.push(session.track(document.fonts.ready.catch(() => undefined)));
+    }
+    await Promise.race([
+      Promise.allSettled(assets),
+      new Promise((r) => setTimeout(r, LOADER_MAX_WAIT_MS)),
+    ]);
+    if (version !== this.mountVersion) return;
+    await session.finish();
+    if (version !== this.mountVersion) return;
 
     // 3. Trigger Framer's native WAAPI Spring Appear Animations synchronously BEFORE mountFramerPage sets MotionIsMounted = true
     const animator = window.animator;
@@ -191,7 +237,7 @@ export class FramerAnimatorService {
     }
 
     // 4. Mount / Hydrate the 100% original Framer Motion runtime
-    const mod = await this.loadFramerMainModule();
+    const mod = await modPromise;
     if (version !== this.mountVersion) return;
     await mod.mountFramerPage(true, mainEl);
 
@@ -206,6 +252,19 @@ export class FramerAnimatorService {
         section?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 150);
     }
+  }
+
+  private waitForImage(img: HTMLImageElement): Promise<void> {
+    if (img.complete) return Promise.resolve();
+    return new Promise((resolve) => {
+      const done = () => {
+        img.removeEventListener('load', done);
+        img.removeEventListener('error', done);
+        resolve();
+      };
+      img.addEventListener('load', done);
+      img.addEventListener('error', done);
+    });
   }
 
   private setupAngularRouterBridge(mainEl: HTMLElement): void {
@@ -262,6 +321,8 @@ export class FramerAnimatorService {
 
   destroy(): void {
     this.mountVersion++;
+    this.loaderSession?.cancel();
+    this.loaderSession = null;
     for (const fn of this.cleanupFns) {
       try {
         fn();
